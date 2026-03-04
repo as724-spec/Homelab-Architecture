@@ -1,0 +1,51 @@
+Markdown
+
+# SOP: Reverting to Nouveau Display Drivers (Blacklisting NVIDIA)
+
+**Objective:** Disable proprietary NVIDIA graphics drivers, remove them from the boot sequence, and force the system to fall back to the open-source Nouveau driver.
+**Environment:** Fedora Linux / AlmaLinux, systems with dedicated NVIDIA GPUs (e.g., Quadro or T-Series).
+
+
+
+## Phase 1: Temporary GRUB Override (Testing Phase)
+Before making permanent changes, verify the open-source driver can successfully initialize the display hardware by modifying the boot parameters in RAM.
+
+1. Reboot the workstation and stop at the GRUB boot menu.
+2. Highlight the default kernel and press `e` to edit.
+3. Locate the line beginning with `linux` or `linuxefi`.
+4. **Remove** any parameters that say `rd.driver.blacklist=nouveau` or `nouveau.modeset=0`.
+5. **Append** the following parameters to the end of the line to force the kernel to ignore NVIDIA and load Nouveau:
+   `rd.driver.blacklist=nvidia modprobe.blacklist=nvidia nouveau.modeset=1`
+6. Press `Ctrl + X` to boot. If the graphical interface loads successfully, proceed to Phase 2.
+
+## Phase 2: Purging Proprietary Packages
+To prevent future conflicts, remove the proprietary NVIDIA binaries from the package manager.
+
+1. Open a terminal and elevate to superuser: `sudo su -`
+2. Remove all NVIDIA-related packages installed via DNF:
+   `dnf remove xorg-x11-drv-nvidia\* akmod-nvidia nvidia\*`
+3. Remove the generated X11 configuration file if it exists (this forces the display server to automatically detect the Nouveau driver on the next boot):
+   `rm -f /etc/X11/xorg.conf.d/nvidia.conf`
+
+## Phase 3: Persistent Kernel Blacklisting
+The kernel must be permanently instructed to ignore the NVIDIA modules during early boot.
+
+1. Create a persistent modprobe blacklist file:
+   `nano /etc/modprobe.d/blacklist-nvidia.conf`
+2. Add the following lines to completely isolate the proprietary modules:
+   ```text
+   blacklist nvidia
+   blacklist nvidia-drm
+   blacklist nvidia-modeset
+   blacklist nvidia-uvm
+
+## Phase 4: GRUB and Initramfs Rebuild
+Updating bootloader and initial ramdisk to lock in new configuration.
+
+1. Update GRUB parameters: Edit /etc/default/grub .
+2. Locate GRUB_CMDLINE_LINUX . Ensure rd.driver.blacklist=noveai is removed. Append rd.driver.blacklist=nvidia to the string.
+3, Rebuild the GRUB conf:
+   `grub2-mkconfig -o /boot/grub2/grub.cfg`
+4. Rebuild the Initramfs: Force Dracut to build a new boot image without the NVIDIA drivers:
+    `dracut -f --regenerate-all`
+5. Reboot the system.
